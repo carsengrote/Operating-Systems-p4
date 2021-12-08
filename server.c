@@ -28,6 +28,7 @@ struct Message {
     int pinum;
     int inum;
     int block;
+    int type;
     char name[28];
     struct DirEntry dirEntry;
     struct Stat stat;
@@ -295,9 +296,11 @@ void writeLog(){
         return;
     }
 
+    // calculating the last block allocated by the file size
+    int lastBlockIndex = (int(inode.size / 4096)) - 1;
     // updating size if it's writing to a new block
-    if (inode.ptrs[writeBlock] == -1){
-        inode.size = inode.size + 4096;
+    if (writeBlock > lastBlockIndex){
+        inode.size = inode.size + ((writeBlock - lastBlockIndex) * 4096);
     }
 
     // need to write new data block, new inode, new piece of inode map to disk (log)
@@ -370,11 +373,28 @@ void diskRead(){
     struct Inode inode;
     read(disk, &inode, sizeof(struct Inode));
 
-    if (inode.ptrs[block] == -1){
+    int fileSize = inode.size; 
+    int lastBlockIndex = (int(inode.size / 4096)) - 1; 
+
+    // Data to send back
+    char data[4096];
+    // empty block inbetween allocated blocks
+    if ((block <= lastBlockIndex) && (inode.ptrs[block] == -1)){
+        // send back all zeros
+        memset(data,0,4096);
+        strcpy(replyMsg->buffer, data);
+        replyMsg->error = 0;
+        sendReply();
+        return;
+    
+    } else if (inode.ptrs[block] == -1){
+        // invalid block 
         replyMsg->error = -1;
         sendReply();
         return;
     }
+
+    // if here then it's valid data in an allocated block to read and send back
 
     int blockAddr = inode.ptrs[block];
     lseek(disk, blockAddr, SEEK _SET);
@@ -382,7 +402,7 @@ void diskRead(){
     read(disk, &data, 4096);
 
     strcpy(replyMsg->buffer, data);
-
+    replyMsg->error = 0;
     sendReply();
     return;
 }
