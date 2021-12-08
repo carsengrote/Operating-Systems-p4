@@ -1,9 +1,9 @@
 # p4
 Another OS project
 
-Carsen Grote // Russell Spence 
-Comp Sci 537 - Operating Systems
-UW - Madison
+Carsen Grote // Russell Spence <br />
+Comp Sci 537 - Operating Systems <br />
+UW - Madison <br />
 Fall 2021
 
 
