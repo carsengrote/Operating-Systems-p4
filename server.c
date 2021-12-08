@@ -115,6 +115,7 @@ void createDisk(char* diskName){
     strcpy(rootDir->entries[1].name, "..");
     rootDir->entries[1].inode = 0; 
 
+    // writing all this stuff to the disk image now
     write(disk, initialCR, 257 * sizeof(int));
     write(disk, emptyInodeMap, 4096 * sizeof(int));
     write(disk, rootInode, sizeof(struct Inode));
@@ -133,6 +134,7 @@ void createDisk(char* diskName){
 void initializeDisk(char* diskImage){
 
     disk = open(diskImage, O_RDWR);
+    // creates disk image if it don't exist
     if (disk < 0){
         createDisk(diskImage);
     }
@@ -149,6 +151,7 @@ void initializeDisk(char* diskImage){
     for(int i = 0; i < 256; i++){
         // disk address of the current section of the inode map
         int inodeMapSection = CR->inodeMapPtrs[i];
+
         lseek(disk, inodeMapSection, SEEK_SET);
         
         for (int j = 0; j < 16; j++){
@@ -348,6 +351,42 @@ void writeLog(){
     return;
 }
 
+void diskRead(){
+
+    replyMsg->error = 0;
+
+    int inum = clientMsg->inum;
+    int block = clientMsg->block;
+
+    inodeAddr = inodeMap->inodePtrs[inum];
+
+    if (inodeAddr == -1){
+        replyMsg->error = -1;
+        sendReply();
+        return;
+    }
+
+    lseek(disk, inodeAddr, SEEK_SET);
+    struct Inode inode;
+    read(disk, &inode, sizeof(struct Inode));
+
+    if (inode.ptrs[block] == -1){
+        replyMsg->error = -1;
+        sendReply();
+        return;
+    }
+
+    int blockAddr = inode.ptrs[block];
+    lseek(disk, blockAddr, SEEK _SET);
+    char data[4096];
+    read(disk, &data, 4096);
+
+    strcpy(replyMsg->buffer, data);
+
+    sendReply();
+    return;
+}
+
 int main(int argc, char* argv[]){
     
     if (argc != 3){
@@ -388,6 +427,8 @@ int main(int argc, char* argv[]){
             stat();
         } else if (clientMsg->cmd == 'W'){
             writeLog();
+        } else if (clientMsg->cmd == 'R'){
+            diskRead();
         }
 
         memset(clientMsg, 0, sizeof(struct Message));
