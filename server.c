@@ -660,6 +660,183 @@ void create() {
     // write at log end
 }
 
+void unlink(){
+
+    replyMsg->error = 0;
+    int pinum = clientMsg->pinum;
+    char name[28];
+    strcpy(name, clientMsg->name);
+
+    // address of parent inode
+    parentInodeAddr = inodeMap->inodePtrs[pinum];
+
+    // checking it's valid
+    if (parentInodeAddr == -1){
+        replyMsg->error = -1;
+        sendReply();
+        return;
+    }
+
+    // seek to and read parent inode
+    struct Inode parentInode;
+    lseek(disk, parentInodeAddr, SEEK_SET); 
+    read(disk, &parentInode, sizeof(struct Inode));
+
+
+    int finalInode = -1;
+    int finalParentBlockNumber = -1;
+    int finalParentBlockAddr = -1;
+    int finalDirIndex = -1;
+    int onlyEntryBool = 0;
+
+    // read parent data blocks for directory entry of the child we're looking for 
+
+    int currentDataBlock = 0; 
+    int currentDataBlockAddr;
+    struct Directory currDirBlock;
+    int found = 0; 
+    while(((currentDataBlockAddr = parentInode.ptrs[currentDataBlock]) != -1) && (found == 0)){
+       
+        // seek to and read data block for child we're looking for
+        lseek(disk, currentDataBlockAddr, SEEK_SET);
+        read(disk, &currDirBlock, sizeof(struct Directory));
+
+        // Now we're in a data block, look through the directory entires in the data block
+        int curDirEntryIndex = 0; 
+        struct DirEntry curDirEntry = currDirBlock.entries[0];
+        while((curDirEntry.inode != -1) && (found == 0)){
+            
+            // found it! 
+            if(strcmp(curDirEntry.name, name) == 0){
+                
+                finalInode = curDirEntry.inode;
+                finalDirIndex = curDirEntryIndex;
+                finalParentBlockAddr = currentDataBlockAddr;
+                finalParentBlockNumber = currentDataBlock;
+                if (finalDirIndex == 0){
+                    lastEntryBool = 1;
+                }
+                found = 1;
+            }
+
+            // going to the next directory entry
+            curDirEntryIndex++;
+            curDirEntry = currDirBlock.entries[curDirEntryIndex]; 
+        }
+        currentDataBlock++;
+    }
+
+    if (found == 0){
+        // file / dir not found in parent - not an error since it's a delete so just reply with success
+        replyMsg->error = 0;
+        sendReply();
+        return;
+    }
+
+    // look into the found file or directory
+    int finalInodeAddress = inodeMap->inodePtrs[finalInode];
+    struct Inode inode;
+    lseek(disk, finalInodeAddress, SEEK_SET); 
+    read(disk, &inode, sizeof(inode));
+    
+    
+    // Check if child is a dir - if it is then ensure it's empty
+    if (inode.type == 'd'){
+        int firstDataBlockAddr = inode.ptrs[0];
+        lseek(disk, firstDataBlockAddr, SEEK_SET);
+        struct Directory firstBlock;
+        read(disk, &firstBlock, sizeof(struct Directory));
+        // first two entries will be self and parent, check third entry
+        if (firstBlock.entries[2].inode != -1){
+            // error - dir not empty
+            replyMsg->error = -1;
+            sendReply();
+            return;
+        }
+    }
+    
+    // now we know either it's an empty Dir or a file so we good to delete
+
+    // marking the directory entry as unused
+    currDirBlock.entries[finalDirIndex] = -1;
+    // checking if it's the only entry in that block of the directory - then remove that data block from parent
+    if (lastEntryBool == 1){
+        parentInode.ptrs[finalParentBlockNumber] = -1;
+        parentInode.size = parentInode.size - 4096;
+    }
+
+    // rewrite piece of inode map for child inode being deleted
+    int childInodePiece = int(finalInode / 16);
+    int newChildInodePiece[16];
+    int childInodePieceAddr = CR->inodeMapPtrs[childInodePiece];
+    lseek(disk, childInodePieceAddr, SEEK_SET);
+    read(disk, &newChildInodePiece, 16*sizeof(int));
+    newChildInodePiece[finalInode % 16] = -1;
+    // now can write piece of inode map for child inode now deleted
+    lseek(disk, CR->logEnd, SEEK_SET);
+    write(disk,&newChildInodePiece, 16*sizeof(int));
+    // update CR on disk 
+    lseek(disk, (childInodePiece + 1 )*4, SEEK_SET);
+    write(disk, &(CR->logEnd), sizeof(int));
+    // update in memory CR
+    CR->inodeMapPtrs[childInodePiece] = CR->logEnd;
+    // update in memory inode map
+    inodeMap->inodePtrs[finalInode] = -1;
+    // update in memory log end
+    CR->logEnd = CR->logEnd + (16*sizeof(int));
+
+    // rewrite parent data block if there's still entries in it
+    if (lastEntryBool != 1){
+
+        lseek(disk, CR->logEnd, SEEK_SET);
+        write(disk, &currDirBlock, sizeof(struct Directory));
+        // update parent inode's pointers to data block
+        parentInode.ptrs[finalParentBlockNumber] = CR->logEnd;
+        // update in memory log end
+        CR->logEnd = CR->logEnd + sizeof(struct Directory));
+    }
+
+    // now rewrite parent inode and inode map piece
+    lseek(disk, CR->logEnd, SEEK_SET);
+    write(disk, &parentInode, sizeof(struct Inode));
+    
+    // update in memory inode map
+    inodeMap->inodePtrs[pinum] = CR->logEnd;
+    // update disk inode map piece and pointer
+    int parentInodeMapPiece[16];
+    // finding the parent piece of the inode map on disk
+    int parentInodeMapPieceAddr = CR->inodeMapPtrs[int(pinum / 16)];
+    lseek(disk, parentInodeMapPieceAddr, SEEK_SET);
+    read(disk, &parentInodeMapPiece, 16*sizeof(int));
+    // updating parent inode map piece
+    parentInodeMapPiece[(pinum % 16)] = CR->logEnd
+    CR->logEnd = CR->logEnd + sizeof(struct Inode);
+    lseek(disk, CR->logEnd, SEEK_SET);
+    // writing new piece of inode map for parent to disk
+    write(disk, &parentInodeMapPiece, 16 * sizeof(int));
+    // update in memory CR
+    CR->inodeMapPtrs[int(pinum / 16)] = CR->logEnd;
+    // update disk CR
+    lseek(disk,(int(pinum / 16) + 1)*4, SEEK_SET);
+    write(disk, &(CR->logEnd), sizeof(int));
+
+    // update in memory log end
+    CR->logEnd = CR->logEnd + (16*sizeof(int));
+
+    // lastly update on disk log end
+    lseek(disk, 0, SEEK_SET);
+    write(disk, &(CR->logEnd), sizeof(int));
+
+    // force all writes to disk
+    fsync(disk);
+
+    // send reply and return
+    replyMsg->error = 0;
+    sendReply();
+
+    return;
+}
+
 int main(int argc, char* argv[]){
     
     if (argc != 3){
@@ -702,6 +879,10 @@ int main(int argc, char* argv[]){
             writeLog();
         } else if (clientMsg->cmd == 'R'){
             diskRead();
+        } else if (clientMsg->cmd == 'U'){
+            unlink();   
+        } else if (clientMsg->cmd == 'C'){
+            create();   
         }
 
         memset(clientMsg, 0, sizeof(struct Message));
