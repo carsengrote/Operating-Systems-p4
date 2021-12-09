@@ -840,6 +840,15 @@ void unlink(){
     return;
 }
 
+void shutdown() {
+    lseek(disk, 0, SEEK_SET);
+    write(disk, CR, sizeof(struct Checkpoint));
+    lseek(disk, &(CR->logEnd), SEEK_SET);
+    write(disk, inodeMap, sizeof(struct InodeMap));
+
+    fsync(disk);
+}
+
 int main(int argc, char* argv[]){
     
     if (argc != 3){
@@ -886,6 +895,9 @@ int main(int argc, char* argv[]){
             unlink();   
         } else if (clientMsg->cmd == 'C'){
             create();   
+        } else if (clientMsg->cmd == 'H'){
+            shutdown();
+            exit(0);
         }
 
         memset(clientMsg, 0, sizeof(struct Message));
