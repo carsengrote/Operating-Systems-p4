@@ -72,7 +72,7 @@ struct sockaddr_in addr; // sock struct
 // Creates disk when the one given doesn't exist
 void createDisk(char* diskName){
     // creates it if doesn't exist
-    disk = open(diskName, O_CREAT, O_RDWR);
+    disk = open(diskName, O_CREAT | O_RDWR);
     
     int initialCR[257];
     
