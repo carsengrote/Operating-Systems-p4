@@ -407,6 +407,255 @@ void diskRead(){
     return;
 }
 
+void create() {
+    ///type 0 = file and 1 = dir
+    replyMsg->error = 0;
+
+    int newInum = -1;
+    //get new inode
+    for(int index = 0; index < 4096; index++) {
+        // find the first inode that has not been allocated yet
+        if(inodeMap->inodePtrs[index] == -1) {
+            newInum = index;
+            break;
+        }
+    }
+
+
+    // Inode map is full, return error
+    if(newInum == -1) {
+        replyMsg->error = -1;
+        sendReply();
+        return;
+    }
+    // store new inode number in message
+    replyMsg->inum = newInum;
+
+    int pinum = clientMsg->pinum;
+
+    int pInodeAddr = inodeMap->inodePtrs[pinum];
+
+    if (pInodeAddr == -1){
+        replyMsg->error = -1;
+        sendReply();
+        return;
+    }
+
+    lseek(disk, pInodeAddr, SEEK_SET);
+    struct Inode pinode;
+    read(disk, &pinode, sizeof(struct Inode));
+
+    // error if parent is a file
+    if(pinode.type == 'f') {
+        replyMsg->error = -1;
+        sendReply();
+        return;
+    }
+
+    // update parent directory
+    int pinodeDataPtr = -1;
+    for(int index=0; index < 14; index++) {
+        if(pinode->ptrs[index] == -1) {
+            // if no pointers in pinode are allocated - SHOULDN't be a case
+            pinodeDataPtr = index-1;
+            break;
+        }
+    }
+    // what if all the data blocks are allocated? - set data ptr to last data block
+    if(pinodeDataPtr == -1) {
+        pinodeDataPtr = 13;
+    }
+    //check to see if new dir block must be created
+    int newDirBlock = 0;
+    struct Directory pdir;
+    lseek(disk, pinode->ptrs[pinodeDataPtr], SEEK_SET);
+    read(disk, &pdir, sizeof(struct Directory));
+    int newDirEntryIndex = -1;
+    for(int index = 0; index < 128; index++) {
+        if(pdir.entries[index] == -1) {
+            newDirEntryIndex = index;
+            break;
+        }
+    }
+    // Directory is full and we are using the last data block, return error
+    if(newDirEntryIndex == -1 && pinodeDataPtr == 13) {
+        replyMsg->error = -1;
+        sendReply();
+        return;
+    }
+    else if(newDirEntryIndex == -1) {
+        newDirBlock = 1;
+        // want to allocate new data block here and make a new directory entry in there
+        struct Directory pdir;
+        // setting all inodes to -1 in dir initially
+        for (int i = 0; i < 128; i ++){
+            pdir.entries[i].inode = -1;
+        }
+        newDirEntryIndex = 0;
+        pinode->size += 4096;
+    }   
+
+    //make new Dir Entry
+    struct DirEntry newEntry;
+    strcpy(newEntry.name, clientMsg->name);
+    newEntry.inode = newInum;
+    // set new entry
+    pdir.entries[newDirEntryIndex] = newEntry;
+    
+    //make new inode
+    struct Inode newInode;
+    
+    for(int i = 0; i < 14; i++){
+        newInode.ptrs[i] = -1;
+    }
+    if(clientMsg->type == 0) {
+        newInode.type = 'f';
+        //Find out what else to do for file creation
+        newInode.size=0;
+    }
+    else {
+        newInode.type = 'd';
+        newInode.size=4096;
+        
+
+        // creating the directory
+        struct Directory newDir; 
+
+        // setting all inodes to -1 in dir initially
+        for (int i = 0; i < 128; i ++){
+            newDir.entries[i].inode = -1;
+        }
+
+        // adding the . entry to dir
+        strcpy(newDir.entries[0].name, ".");
+        newDir.entries[0].inode = newInum;
+
+        // adding the .. entry to root dir
+        strcpy(newDir.entries[1].name, "..");
+        newDir.entries[1].inode = pinum; 
+    }
+    // Find piece of inode map in CR region
+
+
+
+
+    // Addr Math
+    if(newInode.type == 'd' && newDirBlock == 1) {
+        int newDirAddr = CR->logEnd;
+        int newInodeAddr = newDirAddr+4096;
+        int inodeMapAddr = newInodeAddr + 61;
+        int pDirBlockAddr = inodeMapAddr + 64;
+        int pInodeAddr = pDirBlockAddr + 4096;
+        int newLogEnd = pInodeAddr + 61;
+        // update inode pointers to the new block
+        newInode.ptrs[0] = newDirAddr // Log end
+    }
+    else if(newInode.type == 'd' && newDirBlock == 0){
+        int newDirAddr = CR->logEnd;
+        int newInodeAddr = newDirAddr+4096;
+        int inodeMapAddr = newInodeAddr + 61;
+        int pDirBlockAddr = inodeMapAddr + 64;
+        int newLogEnd = pDirBlockAddr + 4096;
+        // update inode pointers to the new block
+        newInode.ptrs[0] = newDirAddr // Log end
+    }
+    else if(newInode.type == 'f' && newDirBlock == 1) {
+        int newInodeAddr = CR->logEnd;
+        int inodeMapAddr = newInodeAddr + 61;
+        int pDirBlockAddr = inodeMapAddr + 64;
+        int pInodeAddr = pDirBlockAddr + 4096;
+        int newLogEnd = pInodeAddr + 61;
+    }
+    else {
+        int newInodeAddr = CR->logEnd;
+        int inodeMapAddr = newInodeAddr + 61;
+        int pDirBlockAddr = inodeMapAddr + 64;
+        int newLogEnd = pDirBlockAddr + 4096;
+    }
+    
+    // making the new inode map piece
+    int inodeMapPieceStart = (int) (newInum / 16);
+    int newInodeMapPiece[16];
+    // copying all inode addrs to new piece from inode amp
+    for (int i = 0; i < 16; i ++){
+        newInodeMapPiece[i] = inodeMap->inodePtrs[(inodeMapPieceStart * 16) + i];
+    }
+    // setting the new inode ptr to the new inode
+    newInodeMapPiece[newInum % 16] = newInodeAddr;
+
+    if(newInode.type == 'd' && newDirBlock == 1) {
+        // seeking to log end to write
+        lseek(disk, newBlockAddr, SEEK_SET);
+        // writing the new data block to log
+        write(disk, newDir, 4096);
+        // writing new inode to log
+        write(disk, &newInode, sizeof(struct Inode));
+        // writing new piece of inode map
+        write(disk, &newInodeMapPiece, 64); 
+        // writing new parent directory block
+        write(disk, &pdir, 4096); 
+        // writing updated parent inode block
+        write(disk, &pinode, sizeof(struct Inode)); 
+    }
+    else if(newInode.type == 'd' && newDirBlock == 0){
+        // seeking to log end to write
+        lseek(disk, newBlockAddr, SEEK_SET);
+        // writing the new data block to log
+        write(disk, newDir, 4096);
+        // writing new inode to log
+        write(disk, &newInode, sizeof(struct Inode));
+        // writing new piece of inode map
+        write(disk, &newInodeMapPiece, 64); 
+        // writing new parent directory block
+        write(disk, &pdir, 4096); 
+    }
+    else if(newInode.type == 'f' && newDirBlock == 1) {
+        // seeking to log end to write
+        lseek(disk, newInodeAddr, SEEK_SET);
+        // writing new inode to log
+        write(disk, &newInode, sizeof(struct Inode));
+        // writing new piece of inode map
+        write(disk, &newInodeMapPiece, 64); 
+        // writing new parent directory block
+        write(disk, &pdir, 4096); 
+        // writing updated parent inode block
+        write(disk, &pinode, sizeof(struct Inode)); 
+    }
+    else {
+        // seeking to log end to write
+        lseek(disk, newInodeAddr, SEEK_SET);
+        // writing new inode to log
+        write(disk, &newInode, sizeof(struct Inode));
+        // writing new piece of inode map
+        write(disk, &newInodeMapPiece, 64); 
+        // writing new parent directory block
+        write(disk, &pdir, 4096); 
+    }
+
+    // now need to update CR, in memory CR, and in memory inode map
+    // updating in memory CR
+    CR->inodeMapPtrs[inodeMapPieceStart] = newInodeMapPieceAddr;
+    CR->logEnd = newLogEnd;
+    // updating the inode map piece poitner in the on disk CR
+    lseek(disk, 0, SEEK_SET);
+    write(disk, &newLogEnd, sizeof(int));
+    lseek(disk, sizeof(int) + (sizeof(int)* inodeMapPieceStart), SEEK_SET);
+    write(disk, &newInodeMapPieceAddr, sizeof(int));
+    // updating in memory inode map
+    inodeMap->inodePtrs[newInum] = newInodeAddr;
+    
+    // forcing writes to disk
+    fsync(disk); 
+
+
+
+    // writes
+    // must rewrite piece of inode
+    // update CR
+    // update in memory version of inode map
+    // write at log end
+}
+
 int main(int argc, char* argv[]){
     
     if (argc != 3){
