@@ -728,9 +728,15 @@ void unlink(){
 
             // going to the next directory entry
             curDirEntryIndex++;
+            if (curDirEntryIndex == 128){
+                break;   
+            }
             curDirEntry = currDirBlock.entries[curDirEntryIndex]; 
         }
         currentDataBlock++;
+        if (currentDataBlock == 14){
+            break;   
+        }
     }
 
     if (found == 0){
