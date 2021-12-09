@@ -252,7 +252,11 @@ void stat(){
     struct Inode inode;
     read(disk, &inode, sizeof(struct Inode));
     // get that info we need
-    replyMsg->stat.type = inode.type;
+    if (inode.type == 'f'){
+        replyMsg->stat.type = 1;  
+    } else {
+        replyMsg->stat.type = 0;   
+    }
     replyMsg->stat.size = inode.size;
 
     sendReply(); 
