@@ -651,7 +651,10 @@ void create() {
     // forcing writes to disk
     fsync(disk); 
 
-
+    replyMsg->error = 0;
+    sendReply();
+    
+    return;
 
     // writes
     // must rewrite piece of inode
