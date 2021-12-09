@@ -127,6 +127,9 @@ void createDisk(char* diskName){
     // now force writes to disk and put disk pointer back to start of the disk
     lseek(disk, 0, SEEK_SET);
     fsync(disk);
+    
+    free(rootInode);
+    free(rootDir);
 
     return;
 }
@@ -334,7 +337,7 @@ void writeLog(){
     // writing updated inode to log
     write(disk, &inode, sizeof(struct Inode));
     // writing new piece of inode map
-    write(disk, &newInodeMapPiece, 64); 
+    write(disk, newInodeMapPiece, 64); 
 
     // now need to update CR, in memory CR, and in memory inode map
     // updating in memory CR
@@ -350,6 +353,7 @@ void writeLog(){
     
     // forcing writes to disk
     fsync(disk); 
+    free(writeBuffer);
 
     // write completed, ensure errror code is 0 and reply to client
     replyMsg->error = 0;
@@ -403,7 +407,7 @@ void diskRead(){
     int blockAddr = inode.ptrs[block];
     lseek(disk, blockAddr, SEEK _SET);
     char data[4096];
-    read(disk, &data, 4096);
+    read(disk, data, 4096);
 
     strcpy(replyMsg->buffer, data);
     replyMsg->error = 0;
