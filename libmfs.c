@@ -37,66 +37,77 @@ int MFS_Init(char *hostname, int port) {
 }
 
 int MFS_Lookup(int pinum, char *name) {
-    message->cmd = 'L';
-    strcpy(message->name, name);
-    message->pinum = pinum;
+
+    memset(&message, 0, sizeof(struct Message));
+    message.cmd = 'L';
+    strcpy(message.name, name);
+    message.pinum = pinum;
 
     int rc = UDP_Write(sd, &addrSnd,  &message, BUFFER_SIZE);
     if (rc < 0) {
         printf("return code of UDP_Write is -1\n")
 	    return -1;
     }
+    memset(&message, 0, sizeof(struct Message));
 
     rc = UDP_Read(sd, &addrRcv, &message, BUFFER_SIZE);
     if (rc < 0) {
         printf("return code of UDP_Read is -1\n")
 	    return -1;
     }
-    if(message->error == -1) {
+    if(message.error == -1) {
         return -1;
     }
-    return message->inum;
+    return message.inum;
 }
 
 int MFS_Stat(int inum, MFS_Stat_t *m) {
-    mesasge->cmd = 'S';
-    message->inum = inum;
+
+    memset(&message, 0, sizeof(struct Message));
+    mesasge.cmd = 'S';
+    message.inum = inum;
     int rc = UDP_Write(sd, &addrSnd, &message, BUFFER_SIZE);
     if (rc < 0) {
         printf("return code of UDP_Write is -1\n")
 	    return -1;
     }
 
+    memset(&message, 0, sizeof(struct Message));
+
     rc = UDP_Read(sd, &addrRcv, &message, BUFFER_SIZE);
     if (rc < 0) {
         printf("return code of UDP_Read is -1\n")
 	    return -1;
     }
-    if(message->error == -1) {
+    if(message.error == -1) {
         return -1;
     }
-    m->type = message->stat.type;
-    m->size = message->stat.size;
+    m->type = message.stat.type;
+    m->size = message.stat.size;
     return 0;
 }
 
 int MFS_Write(int inum, char *buffer, int block) {
-    mesasge->cmd = 'W';
-    message->inum = inum;
-    strcpy(message->buffer, buffer);
-    message->block = block;
+
+    memset(&message, 0, sizeof(struct Message));
+    mesasge.cmd = 'W';
+    message.inum = inum;
+    strcpy(message.buffer, buffer);
+    message.block = block;
     int rc = UDP_Write(sd, &addrSnd,  &message, BUFFER_SIZE);
     if (rc < 0) {
         printf("return code of UDP_Write is -1\n")
 	    return -1;
     }
 
+    memset(&message, 0, sizeof(struct Message));
+
     rc = UDP_Read(sd, &addrRcv, &message, BUFFER_SIZE);
     if (rc < 0) {
         printf("return code of UDP_Read is -1\n")
 	    return -1;
     }
-    if(message->error == -1) {
+    if(message.error == -1) {
         return -1;
     }
 
@@ -104,69 +115,81 @@ int MFS_Write(int inum, char *buffer, int block) {
 }
 
 int MFS_Read(int inum, char *buffer, int block) {
+
+    memset(&message, 0, sizeof(struct Message));
     // might want to check how the DirEnt is being read into the char buffer
-    mesasge->cmd = 'R';
-    message->inum = inum;
-    message->block = block;
+    mesasge.cmd = 'R';
+    message.inum = inum;
+    message.block = block;
     int rc = UDP_Write(sd, &addrSnd, &message, BUFFER_SIZE);
     if (rc < 0) {
         printf("return code of UDP_Write is -1\n")
 	    return -1;
     }
+
+    memset(&message, 0, sizeof(struct Message));
 
     rc = UDP_Read(sd, &addrRcv,  &message, BUFFER_SIZE);
     if (rc < 0) {
         printf("return code of UDP_Read is -1\n")
 	    return -1;
     }
-    if(message->error == -1) {
+    if(message.error == -1) {
         return -1;
     }
-    strcpy(buffer, message->buffer);
+    strcpy(buffer, message.buffer);
 
     return 0;
 }
 
 int MFS_Creat(int pinum, int type, char *name) {
-    mesasge->cmd = 'C';
-    message->pinum = pinum;
-    message->type = type;
-    strcpy(message->name, name);
+
+    memset(&message, 0, sizeof(struct Message));
+    mesasge.cmd = 'C';
+    message.pinum = pinum;
+    message.type = type;
+    strcpy(message.name, name);
     int rc = UDP_Write(sd, &addrSnd, &message, BUFFER_SIZE);
     if (rc < 0) {
         printf("return code of UDP_Write is -1\n")
 	    return -1;
     }
 
+    memset(&message, 0, sizeof(struct Message));
+
     rc = UDP_Read(sd, &addrRcv, &message, BUFFER_SIZE);
     if (rc < 0) {
         printf("return code of UDP_Read is -1\n")
 	    return -1;
     }
-    if(message->error == -1) {
+    if(message.error == -1) {
         return -1;
     }
-    strcpy(buffer, message->buffer);
+    strcpy(buffer, message.buffer);
 
     return 0;
 }
 
 int MFS_Unlink(int pinum, char *name) {
-    mesasge->cmd = 'U';
-    message->pinum = pinum;
-    strcpy(message->name, name);
+
+    memset(&message, 0, sizeof(struct Message));
+    mesasge.cmd = 'U';
+    message.pinum = pinum;
+    strcpy(message.name, name);
     int rc = UDP_Write(sd, &addrSnd, &message, BUFFER_SIZE);
     if (rc < 0) {
         printf("return code of UDP_Write is -1\n")
 	    return -1;
     }
 
+    memset(&message, 0, sizeof(struct Message));
+
     rc = UDP_Read(sd, &addrRcv, &message, BUFFER_SIZE);
     if (rc < 0) {
         printf("return code of UDP_Read is -1\n")
 	    return -1;
     }
-    if(message->error == -1) {
+    if(message.error == -1) {
         return -1;
     }
 
@@ -174,19 +197,22 @@ int MFS_Unlink(int pinum, char *name) {
 }
 
 int MFS_Shutdown() {
-    mesasge->cmd = 'H';
+
+    memset(&message, 0, sizeof(struct Message));
+    mesasge.cmd = 'H';
     int rc = UDP_Write(sd, &addrSnd, &message, BUFFER_SIZE);
     if (rc < 0) {
         printf("return code of UDP_Write is -1\n")
 	    return -1;
     }
+    memset(&message, 0, sizeof(struct Message));
 
     rc = UDP_Read(sd, &addrRcv, &message, BUFFER_SIZE);
     if (rc < 0) {
         printf("return code of UDP_Read is -1\n")
 	    return -1;
     }
-    if(message->error == -1) {
+    if(message.error == -1) {
         return -1;
     }
 
