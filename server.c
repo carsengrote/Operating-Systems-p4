@@ -847,12 +847,15 @@ void unlink(){
 }
 
 void shutdown() {
-    lseek(disk, 0, SEEK_SET);
-    write(disk, CR, sizeof(struct Checkpoint));
-    lseek(disk, &(CR->logEnd), SEEK_SET);
-    write(disk, inodeMap, sizeof(struct InodeMap));
+    //lseek(disk, 0, SEEK_SET);
+    //write(disk, CR, sizeof(struct Checkpoint));
+    //lseek(disk, &(CR->logEnd), SEEK_SET);
+    //write(disk, inodeMap, sizeof(struct InodeMap));
 
-    fsync(disk);
+    //fsync(disk);
+    replyMsg->error = 0;
+    sendReply();
+    return;
 }
 
 int main(int argc, char* argv[]){
@@ -898,7 +901,7 @@ int main(int argc, char* argv[]){
         } else if (clientMsg->cmd == 'C'){
             create();   
         } else if (clientMsg->cmd == 'H'){
-            //shutdown();
+            shutdown();
             exit(0);
         }
 
