@@ -98,7 +98,7 @@ void createDisk(char* diskName){
     }
     rootInode->size = 4096;
     rootInode->type = 'd';
-    rootInode->ptrs[0] = 17473; // location of root data, magic? did the math
+    rootInode->ptrs[0] = 17476; // location of root data, magic? did the math
 
     // creating the root directory
     struct Directory* rootDir = malloc(sizeof( struct Directory)); 
@@ -117,9 +117,13 @@ void createDisk(char* diskName){
     rootDir->entries[1].inode = 0; 
 
     // writing all this stuff to the disk image now
+    //printf("writing CR to %d\n", (int)lseek(disk,0,SEEK_CUR));
     write(disk, initialCR, 257 * sizeof(int));
+    //printf("writing inode map to to %d\n", (int)lseek(disk,0,SEEK_CUR));
     write(disk, emptyInodeMap, 4096 * sizeof(int));
+    //printf("writing root inode to %d\n", (int)lseek(disk,0,SEEK_CUR));
     write(disk, rootInode, sizeof(struct Inode));
+    //printf("writing root dir to %d\n", (int)lseek(disk,0,SEEK_CUR));
     write(disk, rootDir, sizeof(struct Directory));
     int logEnd = ((257*sizeof(int)) + (4096*sizeof(int)) + (sizeof(struct Inode)) + (sizeof(struct Directory)));
     lseek(disk, 0, SEEK_SET); // rewind back to start of disk
@@ -178,9 +182,12 @@ void lookup(){
     // getting the name of the file we're looking for
     strcpy(childName, clientMsg->name); 
 
+    //("looking for inode: %d with child %s\n", pinum, childName);
+
     replyMsg->error = 0;
     // Using in memory inode map to get the disk address of the parent inode
     int inodeAddr = inodeMap->inodePtrs[pinum];
+    //printf("parent inode addr: %d\n", inodeAddr);
     // if it's not valid send reply and return
     if (inodeAddr == -1){
         replyMsg->error = -1;
@@ -207,21 +214,25 @@ void lookup(){
         read(disk, &parentDir, sizeof(struct Directory));
         // now reading through entries in the directory
         for (int dirEntryIndex = 0; dirEntryIndex < 128; dirEntryIndex ++){
+
             
             // current directory entry is not in use
             if(parentDir.entries[dirEntryIndex].inode == -1){
                 continue; // entry not in use
             }
+            //printf("Current entry: %s, inode #: %d\n", parentDir.entries[dirEntryIndex].name, parentDir.entries[dirEntryIndex].inode);
 
             if(strcmp(parentDir.entries[dirEntryIndex].name, childName) == 0){
                 // found that boy lets go
                 replyMsg->inum = parentDir.entries[dirEntryIndex].inode;
+                replyMsg->error = 0;
                 sendReply();
                 return;
             }
         }
     }
 
+    //("File not found\n");
     // file not found so send back error
     replyMsg->error = -1;
 
@@ -434,6 +445,7 @@ void create() {
         return;
     }
     // store new inode number in message
+    //printf("NEW INUM %d\n", newInum);
     replyMsg->inum = newInum;
 
     int pinum = clientMsg->pinum;
@@ -455,6 +467,30 @@ void create() {
         replyMsg->error = -1;
         sendReply();
         return;
+    }
+
+    // Carsen added - need to check if file already exists
+
+    for(int i = 0; i < 14; i ++){
+        int blkAddr = pinode.ptrs[i];
+        if (blkAddr == -1){
+            continue;
+        }
+        struct Directory curDir;
+        lseek(disk, blkAddr, SEEK_SET);
+        read(disk, &curDir, sizeof(struct Directory));
+        for (int j = 0; j < 128; j++){
+            if (curDir.entries[j].inode == -1){
+                continue;
+            }
+            if (strcmp(curDir.entries[j].name, clientMsg->name) == 0){
+                // file already exists just return success 
+                //printf(" %s already exits\n", clientMsg->name);
+                replyMsg->error = 0;
+                sendReply();
+                return;
+            }
+        }
     }
 
                                     // Point of concern - what if parent directory has unallocated blocks between allocated blocks after deletes 
@@ -548,42 +584,53 @@ void create() {
     int inodeMapAddr;
     int pDirBlockAddr;
     int newPInodeAddr;
+    int newPInodeMapAddr;
     int newLogEnd;
 
     if(newInode.type == 'd' && newDirBlock == 1) {
         newDirAddr = CR->logEnd;
         newInodeAddr = newDirAddr+4096;
-        inodeMapAddr = newInodeAddr + 61;
+        inodeMapAddr = newInodeAddr + 64; // Changed this from 61 to 64
         pDirBlockAddr = inodeMapAddr + 64;
         newPInodeAddr = pDirBlockAddr + 4096;
-        newLogEnd = newPInodeAddr + 61;
+        newPInodeMapAddr = newPInodeAddr + 64;
+        newLogEnd = newPInodeMapAddr + 64; // changed this from 61 to 64
         // update inode pointers to the new block
         newInode.ptrs[0] = newDirAddr; // Log end
+        pinode.ptrs[pinodeDataPtr] = pDirBlockAddr;
     }
     else if(newInode.type == 'd' && newDirBlock == 0){
         newDirAddr = CR->logEnd;
         newInodeAddr = newDirAddr+4096;
-        inodeMapAddr = newInodeAddr + 61;
+        inodeMapAddr = newInodeAddr + 64; // 61 to 64
         pDirBlockAddr = inodeMapAddr + 64;
-        newLogEnd = pDirBlockAddr + 4096;
+        newPInodeAddr = pDirBlockAddr + 4096;
+        newPInodeMapAddr = newPInodeAddr + 64;
+        newLogEnd = newPInodeMapAddr + 64;
         // update inode pointers to the new block
         newInode.ptrs[0] = newDirAddr; // Log end
+        pinode.ptrs[pinodeDataPtr] = pDirBlockAddr;
     }
     else if(newInode.type == 'f' && newDirBlock == 1) {
         newInodeAddr = CR->logEnd;
-        inodeMapAddr = newInodeAddr + 61;
+        inodeMapAddr = newInodeAddr + 64; // 61 to 64
         pDirBlockAddr = inodeMapAddr + 64;
         newPInodeAddr = pDirBlockAddr + 4096;
-        newLogEnd = newPInodeAddr + 61;
+        newPInodeMapAddr = newPInodeAddr + 64;
+        newLogEnd = newPInodeMapAddr + 64; // 61 to 64
+        pinode.ptrs[pinodeDataPtr] = pDirBlockAddr;
     }
     else {
         newInodeAddr = CR->logEnd;
-        inodeMapAddr = newInodeAddr + 61;
+        inodeMapAddr = newInodeAddr + 64; // 61 to 64
         pDirBlockAddr = inodeMapAddr + 64;
-        newLogEnd = pDirBlockAddr + 4096;
+        newPInodeAddr = pDirBlockAddr + 4096;
+        newPInodeMapAddr = newPInodeAddr + 64;
+        newLogEnd = newPInodeMapAddr + 64;
+        pinode.ptrs[pinodeDataPtr] = pDirBlockAddr;
     }
     
-    // making the new inode map piece
+    // making the new inode map piece for the new file / dir
     int inodeMapPieceStart = (int) (newInum / 16);
     int newInodeMapPiece[16];
     // copying all inode addrs to new piece from inode amp
@@ -593,6 +640,14 @@ void create() {
     // setting the new inode ptr to the new inode
     newInodeMapPiece[newInum % 16] = newInodeAddr;
 
+    // new inode map piece since we edit parent inode with new pointer to updated block
+    int pInodeMapPieceStart = (int)(pinum / 16);
+    int newPInodeMapPiece[16];
+    for( int i = 0; i < 16; i++){
+        newPInodeMapPiece[i] = inodeMap->inodePtrs[(pInodeMapPieceStart*16) + i];
+    }
+    newPInodeMapPiece[pinum % 16] = newPInodeAddr;
+
     if(newInode.type == 'd' && newDirBlock == 1) {
         // seeking to log end to write
         lseek(disk, newDirAddr, SEEK_SET);
@@ -606,6 +661,8 @@ void create() {
         write(disk, &pdir, 4096); 
         // writing updated parent inode block
         write(disk, &pinode, sizeof(struct Inode)); 
+        //write new piece of inode map for updated parent inode
+        write(disk, &newPInodeMapPiece, 64); 
     }
     else if(newInode.type == 'd' && newDirBlock == 0){
         // seeking to log end to write
@@ -618,6 +675,10 @@ void create() {
         write(disk, &newInodeMapPiece, 64); 
         // writing new parent directory block
         write(disk, &pdir, 4096); 
+        // writing updated parent inode block
+        write(disk, &pinode, sizeof(struct Inode)); 
+        //write new piece of inode map for updated parent inode
+        write(disk, &newPInodeMapPiece, 64); 
     }
     else if(newInode.type == 'f' && newDirBlock == 1) {
         // seeking to log end to write
@@ -630,6 +691,8 @@ void create() {
         write(disk, &pdir, 4096); 
         // writing updated parent inode block
         write(disk, &pinode, sizeof(struct Inode)); 
+        // writing new parent inode map piece
+        write(disk, &newPInodeMapPiece, 64); 
     }
     else {
         // seeking to log end to write
@@ -640,11 +703,16 @@ void create() {
         write(disk, &newInodeMapPiece, 64); 
         // writing new parent directory block
         write(disk, &pdir, 4096); 
+        // writing updated parent inode block
+        write(disk, &pinode, sizeof(struct Inode)); 
+        // writing new parent inode map piece
+        write(disk, &newPInodeMapPiece, 64);
     }
 
     // now need to update CR, in memory CR, and in memory inode map
     // updating in memory CR
     CR->inodeMapPtrs[inodeMapPieceStart] = inodeMapAddr;
+    CR->inodeMapPtrs[pInodeMapPieceStart] = inodeMapAddr; // FIX
     CR->logEnd = newLogEnd;
     // updating the inode map piece poitner in the on disk CR
     lseek(disk, 0, SEEK_SET);
@@ -652,7 +720,9 @@ void create() {
     lseek(disk, sizeof(int) + (sizeof(int)* inodeMapPieceStart), SEEK_SET);
     write(disk, &inodeMapAddr, sizeof(int));
     // updating in memory inode map
+    //printf("UPDATING IN MEMORY INODE MAP\n");
     inodeMap->inodePtrs[newInum] = newInodeAddr;
+    inodeMap->inodePtrs[pinum] = newPInodeAddr;
     
     // forcing writes to disk
     fsync(disk); 
@@ -871,14 +941,22 @@ int main(int argc, char* argv[]){
         exit(0);
     }
 
+    printf("Initializing disk\n");
     initializeDisk(argv[2]);
-
+    
     int portNum = atoi(argv[1]);
     if (portNum == 0){
         printf("Port error\n");
         exit(0);
     }
+    
     sd = UDP_Open(portNum);
+    if (sd < 0){
+        printf("ERROR Opening socket\n");
+        exit(0);
+    }
+
+    printf("Server Listening on port: %d\n", portNum);
 
     clientMsg = malloc(sizeof(struct Message)); // one for from the client
     replyMsg = malloc(sizeof(struct Message)); // the one we'll send back to the client
@@ -888,8 +966,8 @@ int main(int argc, char* argv[]){
 
     while(1){
 
+        
         int rc = UDP_Read(sd, &addr, (void *)clientMsg, sizeof(struct Message));
-
         if (rc <= 0 ){
             continue;
         }
