@@ -121,7 +121,7 @@ void createDisk(char* diskName){
     write(disk, emptyInodeMap, 4096 * sizeof(int));
     write(disk, rootInode, sizeof(struct Inode));
     write(disk, rootDir, sizeof(struct Directory));
-    int logEnd = ((257*sizeof(int)) + (4096*sizeof(int)) + (sizeof(struct Inode)) + (sizeof(struct Directory)))
+    int logEnd = ((257*sizeof(int)) + (4096*sizeof(int)) + (sizeof(struct Inode)) + (sizeof(struct Directory)));
     lseek(disk, 0, SEEK_SET); // rewind back to start of disk
     write(disk, &logEnd, sizeof(int)); // write the end of the log to the Checkpoint since first int in the checkpoint is log end
     // now force writes to disk and put disk pointer back to start of the disk
@@ -301,7 +301,7 @@ void writeLog(){
     }
 
     // calculating the last block allocated by the file size
-    int lastBlockIndex = (int(inode.size / 4096)) - 1;
+    int lastBlockIndex = ((int)(inode.size / 4096)) - 1;
     // updating size if it's writing to a new block
     if (writeBlock > lastBlockIndex){
         inode.size = inode.size + ((writeBlock - lastBlockIndex) * 4096);
@@ -379,7 +379,7 @@ void diskRead(){
     read(disk, &inode, sizeof(struct Inode));
 
     int fileSize = inode.size; 
-    int lastBlockIndex = (int(fileSize / 4096)) - 1; 
+    int lastBlockIndex = ((int)(fileSize / 4096)) - 1; 
 
     // Data to send back
     char data[4096];
@@ -402,8 +402,7 @@ void diskRead(){
     // if here then it's valid data in an allocated block to read and send back
 
     int blockAddr = inode.ptrs[block];
-    lseek(disk, blockAddr, SEEK _SET);
-    char data[4096];
+    lseek(disk, blockAddr, SEEK_SET);
     read(disk, data, 4096);
 
     // zero the memory before we write to it
@@ -480,7 +479,7 @@ void create() {
     read(disk, &pdir, sizeof(struct Directory));
     int newDirEntryIndex = -1;
     for(int index = 0; index < 128; index++) {
-        if(pdir.entries[index] == -1) {
+        if(pdir.entries[index].inode == -1) {
             newDirEntryIndex = index;
             break;
         }
@@ -494,7 +493,7 @@ void create() {
     } else if(newDirEntryIndex == -1) {
         newDirBlock = 1;
         // want to allocate new data block here and make a new directory entry in there
-        struct Directory pdir;
+        // struct Directory pdir;
         // setting all inodes to -1 in dir initially
         for (int i = 0; i < 128; i ++){
             pdir.entries[i].inode = -1;
@@ -512,6 +511,9 @@ void create() {
     
     //make new inode
     struct Inode newInode;
+
+    // make new Directory
+    struct Directory newDir;
     
     for(int i = 0; i < 14; i++){
         newInode.ptrs[i] = -1;
@@ -524,9 +526,6 @@ void create() {
     } else {
         newInode.type = 'd';
         newInode.size=4096;
-
-        // creating the directory
-        struct Directory newDir; 
 
         // setting all inodes to -1 in dir initially
         for (int i = 0; i < 128; i ++){
@@ -544,37 +543,44 @@ void create() {
     // Find piece of inode map in CR region
 
     // Addr Math
+    int newDirAddr;
+    int newInodeAddr;
+    int inodeMapAddr;
+    int pDirBlockAddr;
+    int newPInodeAddr;
+    int newLogEnd;
+
     if(newInode.type == 'd' && newDirBlock == 1) {
-        int newDirAddr = CR->logEnd;
-        int newInodeAddr = newDirAddr+4096;
-        int inodeMapAddr = newInodeAddr + 61;
-        int pDirBlockAddr = inodeMapAddr + 64;
-        int pInodeAddr = pDirBlockAddr + 4096;
-        int newLogEnd = pInodeAddr + 61;
+        newDirAddr = CR->logEnd;
+        newInodeAddr = newDirAddr+4096;
+        inodeMapAddr = newInodeAddr + 61;
+        pDirBlockAddr = inodeMapAddr + 64;
+        newPInodeAddr = pDirBlockAddr + 4096;
+        newLogEnd = newPInodeAddr + 61;
         // update inode pointers to the new block
-        newInode.ptrs[0] = newDirAddr // Log end
+        newInode.ptrs[0] = newDirAddr; // Log end
     }
     else if(newInode.type == 'd' && newDirBlock == 0){
-        int newDirAddr = CR->logEnd;
-        int newInodeAddr = newDirAddr+4096;
-        int inodeMapAddr = newInodeAddr + 61;
-        int pDirBlockAddr = inodeMapAddr + 64;
-        int newLogEnd = pDirBlockAddr + 4096;
+        newDirAddr = CR->logEnd;
+        newInodeAddr = newDirAddr+4096;
+        inodeMapAddr = newInodeAddr + 61;
+        pDirBlockAddr = inodeMapAddr + 64;
+        newLogEnd = pDirBlockAddr + 4096;
         // update inode pointers to the new block
-        newInode.ptrs[0] = newDirAddr // Log end
+        newInode.ptrs[0] = newDirAddr; // Log end
     }
     else if(newInode.type == 'f' && newDirBlock == 1) {
-        int newInodeAddr = CR->logEnd;
-        int inodeMapAddr = newInodeAddr + 61;
-        int pDirBlockAddr = inodeMapAddr + 64;
-        int pInodeAddr = pDirBlockAddr + 4096;
-        int newLogEnd = pInodeAddr + 61;
+        newInodeAddr = CR->logEnd;
+        inodeMapAddr = newInodeAddr + 61;
+        pDirBlockAddr = inodeMapAddr + 64;
+        newPInodeAddr = pDirBlockAddr + 4096;
+        newLogEnd = newPInodeAddr + 61;
     }
     else {
-        int newInodeAddr = CR->logEnd;
-        int inodeMapAddr = newInodeAddr + 61;
-        int pDirBlockAddr = inodeMapAddr + 64;
-        int newLogEnd = pDirBlockAddr + 4096;
+        newInodeAddr = CR->logEnd;
+        inodeMapAddr = newInodeAddr + 61;
+        pDirBlockAddr = inodeMapAddr + 64;
+        newLogEnd = pDirBlockAddr + 4096;
     }
     
     // making the new inode map piece
@@ -589,9 +595,9 @@ void create() {
 
     if(newInode.type == 'd' && newDirBlock == 1) {
         // seeking to log end to write
-        lseek(disk, newBlockAddr, SEEK_SET);
+        lseek(disk, newDirAddr, SEEK_SET);
         // writing the new data block to log
-        write(disk, newDir, 4096);
+        write(disk, &newDir, 4096);
         // writing new inode to log
         write(disk, &newInode, sizeof(struct Inode));
         // writing new piece of inode map
@@ -603,9 +609,9 @@ void create() {
     }
     else if(newInode.type == 'd' && newDirBlock == 0){
         // seeking to log end to write
-        lseek(disk, newBlockAddr, SEEK_SET);
+        lseek(disk, newDirAddr, SEEK_SET);
         // writing the new data block to log
-        write(disk, newDir, 4096);
+        write(disk, &newDir, 4096);
         // writing new inode to log
         write(disk, &newInode, sizeof(struct Inode));
         // writing new piece of inode map
@@ -638,13 +644,13 @@ void create() {
 
     // now need to update CR, in memory CR, and in memory inode map
     // updating in memory CR
-    CR->inodeMapPtrs[inodeMapPieceStart] = newInodeMapPieceAddr;
+    CR->inodeMapPtrs[inodeMapPieceStart] = inodeMapAddr;
     CR->logEnd = newLogEnd;
     // updating the inode map piece poitner in the on disk CR
     lseek(disk, 0, SEEK_SET);
     write(disk, &newLogEnd, sizeof(int));
     lseek(disk, sizeof(int) + (sizeof(int)* inodeMapPieceStart), SEEK_SET);
-    write(disk, &newInodeMapPieceAddr, sizeof(int));
+    write(disk, &inodeMapAddr, sizeof(int));
     // updating in memory inode map
     inodeMap->inodePtrs[newInum] = newInodeAddr;
     
@@ -663,7 +669,7 @@ void create() {
     // write at log end
 }
 
-void unlink(){
+void diskUnlink(){
 
     replyMsg->error = 0;
     int pinum = clientMsg->pinum;
@@ -671,7 +677,7 @@ void unlink(){
     strcpy(name, clientMsg->name);
 
     // address of parent inode
-    parentInodeAddr = inodeMap->inodePtrs[pinum];
+    int parentInodeAddr = inodeMap->inodePtrs[pinum];
 
     // checking it's valid
     if (parentInodeAddr == -1){
@@ -687,9 +693,9 @@ void unlink(){
 
     int finalInode = -1;
     int finalParentBlockNumber = -1;
-    int finalParentBlockAddr = -1;
+    //int finalParentBlockAddr = -1;
     int finalDirIndex = -1;
-    int onlyEntryBool = 0;
+    int lastEntryBool = 0;
 
     // read parent data blocks for directory entry of the child we're looking for 
     int currentDataBlock = -1; 
@@ -701,7 +707,7 @@ void unlink(){
 
         currentDataBlock++;
         // continue if the current data block is not allocated
-        currentDataBlockAddr = parentInode.ptrs[currentDataBlock]
+        currentDataBlockAddr = parentInode.ptrs[currentDataBlock];
         if(currentDataBlockAddr == -1){
            continue;
         }
@@ -724,7 +730,7 @@ void unlink(){
                 
                 finalInode = currDirBlock.entries[curDirEntryIndex].inode;
                 finalDirIndex = curDirEntryIndex;
-                finalParentBlockAddr = currentDataBlockAddr;
+                //finalParentBlockAddr = currentDataBlockAddr;
                 finalParentBlockNumber = currentDataBlock;
                 if (finalDirIndex == 0){
                     lastEntryBool = 1;
@@ -775,7 +781,7 @@ void unlink(){
     }
 
     // rewrite piece of inode map for child inode being deleted
-    int childInodePiece = int(finalInode / 16);
+    int childInodePiece = (int)(finalInode / 16);
     int newChildInodePiece[16];
     int childInodePieceAddr = CR->inodeMapPtrs[childInodePiece];
     lseek(disk, childInodePieceAddr, SEEK_SET);
@@ -802,7 +808,7 @@ void unlink(){
         // update parent inode's pointers to data block
         parentInode.ptrs[finalParentBlockNumber] = CR->logEnd;
         // update in memory log end
-        CR->logEnd = CR->logEnd + sizeof(struct Directory));
+        CR->logEnd = CR->logEnd + sizeof(struct Directory);
     }
 
     // now rewrite parent inode and inode map piece
@@ -814,19 +820,19 @@ void unlink(){
     // update disk inode map piece and pointer
     int parentInodeMapPiece[16];
     // finding the parent piece of the inode map on disk
-    int parentInodeMapPieceAddr = CR->inodeMapPtrs[int(pinum / 16)];
+    int parentInodeMapPieceAddr = CR->inodeMapPtrs[(int)(pinum / 16)];
     lseek(disk, parentInodeMapPieceAddr, SEEK_SET);
     read(disk, &parentInodeMapPiece, 16*sizeof(int));
     // updating parent inode map piece
-    parentInodeMapPiece[(pinum % 16)] = CR->logEnd
+    parentInodeMapPiece[(pinum % 16)] = CR->logEnd;
     CR->logEnd = CR->logEnd + sizeof(struct Inode);
     lseek(disk, CR->logEnd, SEEK_SET);
     // writing new piece of inode map for parent to disk
     write(disk, &parentInodeMapPiece, 16 * sizeof(int));
     // update in memory CR
-    CR->inodeMapPtrs[int(pinum / 16)] = CR->logEnd;
+    CR->inodeMapPtrs[(int)(pinum / 16)] = CR->logEnd;
     // update disk CR
-    lseek(disk,(int(pinum / 16) + 1)*4, SEEK_SET);
+    lseek(disk,(((int)(pinum / 16)) + 1)*4, SEEK_SET);
     write(disk, &(CR->logEnd), sizeof(int));
 
     // update in memory log end
@@ -846,7 +852,7 @@ void unlink(){
     return;
 }
 
-void shutdown() {
+void diskShutdown() {
     //lseek(disk, 0, SEEK_SET);
     //write(disk, CR, sizeof(struct Checkpoint));
     //lseek(disk, &(CR->logEnd), SEEK_SET);
@@ -897,11 +903,11 @@ int main(int argc, char* argv[]){
         } else if (clientMsg->cmd == 'R'){
             diskRead();
         } else if (clientMsg->cmd == 'U'){
-            unlink();   
+            diskUnlink();   
         } else if (clientMsg->cmd == 'C'){
             create();   
         } else if (clientMsg->cmd == 'H'){
-            shutdown();
+            diskShutdown();
             exit(0);
         }
 
