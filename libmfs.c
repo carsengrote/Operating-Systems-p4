@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include "mfs.h"
 #include "udp.h"
 
@@ -157,6 +158,9 @@ int MFS_Read(int inum, char *buffer, int block) {
 int MFS_Creat(int pinum, int type, char *name) {
 
     memset(&message, 0, sizeof(struct Message));
+    if (strlen(name) > 28){
+        return -1;
+    }
     message.cmd = 'C';
     message.pinum = pinum;
     message.type = type;
@@ -229,3 +233,4 @@ int MFS_Shutdown() {
 
     return 0;
 }
+
