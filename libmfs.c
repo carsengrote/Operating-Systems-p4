@@ -105,7 +105,7 @@ int MFS_Write(int inum, char *buffer, int block) {
     memset(&message, 0, sizeof(struct Message));
     message.cmd = 'W';
     message.inum = inum;
-    strcpy(message.buffer, buffer);
+    memcpy(message.buffer, buffer, 4096);
     message.block = block;
     int rc = UDP_Write(sd, &addrSnd,  (void*)&message, sizeof(struct Message));
     if (rc < 0) {
@@ -150,7 +150,9 @@ int MFS_Read(int inum, char *buffer, int block) {
     if(message.error == -1) {
         return -1;
     }
-    strcpy(buffer, message.buffer);
+    //strcpy(buffer, message.buffer);
+
+    memcpy(buffer, message.buffer, 4096);
 
     return 0;
 }
