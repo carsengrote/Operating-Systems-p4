@@ -280,7 +280,9 @@ void writeLog(){
     replyMsg->error = 0;
     // getting client given arguments
     int inum = clientMsg->inum;
-    char* writeBuffer = strdup(clientMsg->buffer);
+    char* writeBuffer = malloc(4096);
+    //char* writeBuffer = strdup(clientMsg->buffer);
+    memcpy(writeBuffer, clientMsg->buffer, 4096);
     int writeBlock = clientMsg->block;
 
     // check for invalid block to write to
@@ -398,7 +400,8 @@ void diskRead(){
     if ((block <= lastBlockIndex) && (inode.ptrs[block] == -1)){
         // send back all zeros
         memset(data,0,4096);
-        strcpy(replyMsg->buffer, data);
+        //strcpy(replyMsg->buffer, data);
+        memcpy(replyMsg->buffer, data, 4096);
         replyMsg->error = 0;
         sendReply();
         return;
@@ -418,7 +421,8 @@ void diskRead(){
 
     // zero the memory before we write to it
     memset(replyMsg->buffer, 0, 4096);
-    strcpy(replyMsg->buffer, data);
+    memcpy(replyMsg->buffer, data, 4096);
+    //strcpy(replyMsg->buffer, data);
     replyMsg->error = 0;
     sendReply();
     return;
