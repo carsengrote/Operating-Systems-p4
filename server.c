@@ -480,6 +480,8 @@ void create() {
         lseek(disk, blkAddr, SEEK_SET);
         read(disk, &curDir, sizeof(struct Directory));
         for (int j = 0; j < 128; j++){
+
+            //printf("current inode name: %s\n", curDir.entries[j].name);
             if (curDir.entries[j].inode == -1){
                 continue;
             }
@@ -554,7 +556,7 @@ void create() {
     for(int i = 0; i < 14; i++){
         newInode.ptrs[i] = -1;
     }
-    if(clientMsg->type == 0) {
+    if(clientMsg->type == 1) {
         newInode.type = 'f';
         //Find out what else to do for file creation
         newInode.size=0;
@@ -588,6 +590,7 @@ void create() {
     int newLogEnd;
 
     if(newInode.type == 'd' && newDirBlock == 1) {
+        //printf("here1\n");
         newDirAddr = CR->logEnd;
         newInodeAddr = newDirAddr+4096;
         inodeMapAddr = newInodeAddr + 64; // Changed this from 61 to 64
@@ -600,6 +603,7 @@ void create() {
         pinode.ptrs[pinodeDataPtr] = pDirBlockAddr;
     }
     else if(newInode.type == 'd' && newDirBlock == 0){
+        //printf("here2\n");
         newDirAddr = CR->logEnd;
         newInodeAddr = newDirAddr+4096;
         inodeMapAddr = newInodeAddr + 64; // 61 to 64
@@ -612,6 +616,7 @@ void create() {
         pinode.ptrs[pinodeDataPtr] = pDirBlockAddr;
     }
     else if(newInode.type == 'f' && newDirBlock == 1) {
+        //printf("here3\n");
         newInodeAddr = CR->logEnd;
         inodeMapAddr = newInodeAddr + 64; // 61 to 64
         pDirBlockAddr = inodeMapAddr + 64;
@@ -621,6 +626,7 @@ void create() {
         pinode.ptrs[pinodeDataPtr] = pDirBlockAddr;
     }
     else {
+        //printf("here for new file\n");
         newInodeAddr = CR->logEnd;
         inodeMapAddr = newInodeAddr + 64; // 61 to 64
         pDirBlockAddr = inodeMapAddr + 64;
@@ -726,6 +732,8 @@ void create() {
     
     // forcing writes to disk
     fsync(disk); 
+
+    //printf("new inode num: %d\n", newInum);
 
     replyMsg->error = 0;
     sendReply();
