@@ -14,10 +14,6 @@ C: create
 U: unlink
 H: shutdown
 */
-struct timeval tv;
-
-tv.tv_sec = 5;
-tv.tv_usec = 0;
 
 struct DirEntry {
     char name[28];
@@ -47,6 +43,10 @@ struct sockaddr_in addrSnd, addrRcv;
 int sd;
 
 int MFS_Init(char *hostname, int port) {
+    //tryPort = 20000;
+    //while((sd = UDP_Open(20000)) == -1){
+
+    //}
     sd = UDP_Open(20000); //do we need this? Also, I think the port number should be diff
     int rc = UDP_FillSockAddr(&addrSnd, hostname, port);
     // is this what we should be returning?
@@ -54,8 +54,6 @@ int MFS_Init(char *hostname, int port) {
 }
 
 int MFS_Lookup(int pinum, char *name) {
-    fd_set rfds, wfds;
-    int retval;
 
     memset(&message, 0, sizeof(struct Message));
     message.cmd = 'L';
@@ -63,15 +61,6 @@ int MFS_Lookup(int pinum, char *name) {
     message.pinum = pinum;
 
     int rc = UDP_Write(sd, &addrSnd,  (void *)&message, sizeof(struct Message));
-
-    FD_ZERO(&wfds);
-    FD_SET(sd, &wfds);
-    while(retval = select(sd+1, NULL, &wfds, NULL, &tv)==0) {
-        rc = UDP_Write(sd, &addrSnd,  (void *)&message, sizeof(struct Message));
-        FD_ZERO(&wfds);
-        FD_SET(sd, &wfds);
-    }
-
     if (rc < 0) {
         printf("return code of UDP_Write is -1\n");
 	    return -1;
@@ -79,40 +68,23 @@ int MFS_Lookup(int pinum, char *name) {
     memset(&message, 0, sizeof(struct Message));
 
     rc = UDP_Read(sd, &addrRcv, (void*) &message, sizeof(struct Message));
-
-    FD_ZERO(&rfds);
-    FD_SET(sd, &rfds);
-    while(retval = select(sd+1, NULL, &rfds, NULL, &tv)==0) {
-        rc = UDP_Read(sd, &addrRcv, (void*) &message, sizeof(struct Message));
-        FD_ZERO(&rfds);
-        FD_SET(sd, &rfds);
-    }
-
     if (rc < 0) {
         printf("return code of UDP_Read is -1\n");
 	    return -1;
     }
     if(message.error == -1) {
+        //printf("%s", message.buffer);
         return -1;
     }
     return message.inum;
 }
 
 int MFS_Stat(int inum, MFS_Stat_t *m) {
-    fd_set rfds;
-    int retval;
 
     memset(&message, 0, sizeof(struct Message));
     message.cmd = 'S';
     message.inum = inum;
     int rc = UDP_Write(sd, &addrSnd, (void*)&message, sizeof(struct Message));
-    FD_ZERO(&wfds);
-    FD_SET(sd, &wfds);
-    while(retval = select(sd+1, NULL, &wfds, NULL, &tv)==0) {
-        rc = UDP_Write(sd, &addrSnd,  (void *)&message, sizeof(struct Message));
-        FD_ZERO(&wfds);
-        FD_SET(sd, &wfds);
-    }
     if (rc < 0) {
         printf("return code of UDP_Write is -1\n");
 	    return -1;
@@ -121,13 +93,6 @@ int MFS_Stat(int inum, MFS_Stat_t *m) {
     memset(&message, 0, sizeof(struct Message));
 
     rc = UDP_Read(sd, &addrRcv, (void*)&message, sizeof(struct Message));
-    FD_ZERO(&rfds);
-    FD_SET(sd, &rfds);
-    while(retval = select(sd+1, NULL, &rfds, NULL, &tv)==0) {
-        rc = UDP_Read(sd, &addrRcv, (void*) &message, sizeof(struct Message));
-        FD_ZERO(&rfds);
-        FD_SET(sd, &rfds);
-    }
     if (rc < 0) {
         printf("return code of UDP_Read is -1\n");
 	    return -1;
@@ -141,8 +106,6 @@ int MFS_Stat(int inum, MFS_Stat_t *m) {
 }
 
 int MFS_Write(int inum, char *buffer, int block) {
-    fd_set rfds;
-    int retval;
 
     memset(&message, 0, sizeof(struct Message));
     message.cmd = 'W';
@@ -150,13 +113,6 @@ int MFS_Write(int inum, char *buffer, int block) {
     memcpy(message.buffer, buffer, 4096);
     message.block = block;
     int rc = UDP_Write(sd, &addrSnd,  (void*)&message, sizeof(struct Message));
-    FD_ZERO(&wfds);
-    FD_SET(sd, &wfds);
-    while(retval = select(sd+1, NULL, &wfds, NULL, &tv)==0) {
-        rc = UDP_Write(sd, &addrSnd,  (void *)&message, sizeof(struct Message));
-        FD_ZERO(&wfds);
-        FD_SET(sd, &wfds);
-    }
     if (rc < 0) {
         printf("return code of UDP_Write is -1\n");
 	    return -1;
@@ -165,13 +121,6 @@ int MFS_Write(int inum, char *buffer, int block) {
     memset(&message, 0, sizeof(struct Message));
 
     rc = UDP_Read(sd, &addrRcv, (void*)&message, sizeof(struct Message));
-    FD_ZERO(&rfds);
-    FD_SET(sd, &rfds);
-    while(retval = select(sd+1, NULL, &rfds, NULL, &tv)==0) {
-        rc = UDP_Read(sd, &addrRcv, (void*) &message, sizeof(struct Message));
-        FD_ZERO(&rfds);
-        FD_SET(sd, &rfds);
-    }
     if (rc < 0) {
         printf("return code of UDP_Read is -1\n");
 	    return -1;
@@ -184,8 +133,6 @@ int MFS_Write(int inum, char *buffer, int block) {
 }
 
 int MFS_Read(int inum, char *buffer, int block) {
-    fd_set rfds;
-    int retval;
 
     memset(&message, 0, sizeof(struct Message));
     // might want to check how the DirEnt is being read into the char buffer
@@ -193,13 +140,6 @@ int MFS_Read(int inum, char *buffer, int block) {
     message.inum = inum;
     message.block = block;
     int rc = UDP_Write(sd, &addrSnd, (void*)&message, sizeof(struct Message));
-    FD_ZERO(&wfds);
-    FD_SET(sd, &wfds);
-    while(retval = select(sd+1, NULL, &wfds, NULL, &tv)==0) {
-        rc = UDP_Write(sd, &addrSnd,  (void *)&message, sizeof(struct Message));
-        FD_ZERO(&wfds);
-        FD_SET(sd, &wfds);
-    }
     if (rc < 0) {
         printf("return code of UDP_Write is -1\n");
 	    return -1;
@@ -208,13 +148,6 @@ int MFS_Read(int inum, char *buffer, int block) {
     memset(&message, 0, sizeof(struct Message));
 
     rc = UDP_Read(sd, &addrRcv,  (void*)&message, sizeof(struct Message));
-    FD_ZERO(&rfds);
-    FD_SET(sd, &rfds);
-    while(retval = select(sd+1, NULL, &rfds, NULL, &tv)==0) {
-        rc = UDP_Read(sd, &addrRcv, (void*) &message, sizeof(struct Message));
-        FD_ZERO(&rfds);
-        FD_SET(sd, &rfds);
-    }
     if (rc < 0) {
         printf("return code of UDP_Read is -1\n");
 	    return -1;
@@ -230,8 +163,6 @@ int MFS_Read(int inum, char *buffer, int block) {
 }
 
 int MFS_Creat(int pinum, int type, char *name) {
-    fd_set rfds;
-    int retval;
 
     memset(&message, 0, sizeof(struct Message));
     if (strlen(name) > 28){
@@ -242,13 +173,6 @@ int MFS_Creat(int pinum, int type, char *name) {
     message.type = type;
     strcpy(message.name, name);
     int rc = UDP_Write(sd, &addrSnd, (void*)&message, sizeof(struct Message));
-    FD_ZERO(&wfds);
-    FD_SET(sd, &wfds);
-    while(retval = select(sd+1, NULL, &wfds, NULL, &tv)==0) {
-        rc = UDP_Write(sd, &addrSnd,  (void *)&message, sizeof(struct Message));
-        FD_ZERO(&wfds);
-        FD_SET(sd, &wfds);
-    }
     if (rc < 0) {
         printf("return code of UDP_Write is -1\n");
 	    return -1;
@@ -257,13 +181,6 @@ int MFS_Creat(int pinum, int type, char *name) {
     memset(&message, 0, sizeof(struct Message));
 
     rc = UDP_Read(sd, &addrRcv, (void*)&message, sizeof(struct Message));
-    FD_ZERO(&rfds);
-    FD_SET(sd, &rfds);
-    while(retval = select(sd+1, NULL, &rfds, NULL, &tv)==0) {
-        rc = UDP_Read(sd, &addrRcv, (void*) &message, sizeof(struct Message));
-        FD_ZERO(&rfds);
-        FD_SET(sd, &rfds);
-    }
     if (rc < 0) {
         printf("return code of UDP_Read is -1\n");
 	    return -1;
@@ -276,21 +193,12 @@ int MFS_Creat(int pinum, int type, char *name) {
 }
 
 int MFS_Unlink(int pinum, char *name) {
-    fd_set rfds;
-    int retval;
 
     memset(&message, 0, sizeof(struct Message));
     message.cmd = 'U';
     message.pinum = pinum;
     strcpy(message.name, name);
     int rc = UDP_Write(sd, &addrSnd, (void*)&message, sizeof(struct Message));
-    FD_ZERO(&wfds);
-    FD_SET(sd, &wfds);
-    while(retval = select(sd+1, NULL, &wfds, NULL, &tv)==0) {
-        rc = UDP_Write(sd, &addrSnd,  (void *)&message, sizeof(struct Message));
-        FD_ZERO(&wfds);
-        FD_SET(sd, &wfds);
-    }
     if (rc < 0) {
         printf("return code of UDP_Write is -1\n");
 	    return -1;
@@ -299,13 +207,6 @@ int MFS_Unlink(int pinum, char *name) {
     memset(&message, 0, sizeof(struct Message));
 
     rc = UDP_Read(sd, &addrRcv, (void*)&message, sizeof(struct Message));
-    FD_ZERO(&rfds);
-    FD_SET(sd, &rfds);
-    while(retval = select(sd+1, NULL, &rfds, NULL, &tv)==0) {
-        rc = UDP_Read(sd, &addrRcv, (void*) &message, sizeof(struct Message));
-        FD_ZERO(&rfds);
-        FD_SET(sd, &rfds);
-    }
     if (rc < 0) {
         printf("return code of UDP_Read is -1\n");
 	    return -1;
@@ -339,4 +240,3 @@ int MFS_Shutdown() {
 
     return 0;
 }
-
