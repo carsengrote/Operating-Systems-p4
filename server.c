@@ -176,12 +176,15 @@ void sendReply(){
 }
 
 void lookup(){
+
     
     int pinum = clientMsg->pinum;
     char childName[28];
     // getting the name of the file we're looking for
     strcpy(childName, clientMsg->name); 
 
+    //printf("looking for %s in inode %d\n", childName, pinum);
+    fsync(fileno(stdout));
     //("looking for inode: %d with child %s\n", pinum, childName);
 
     replyMsg->error = 0;
@@ -190,6 +193,8 @@ void lookup(){
     //printf("parent inode addr: %d\n", inodeAddr);
     // if it's not valid send reply and return
     if (inodeAddr == -1){
+        //printf("inode address is invalid\n");
+        fsync(fileno(stdout));
         replyMsg->error = -1;
         sendReply();
         return;
@@ -220,21 +225,32 @@ void lookup(){
             if(parentDir.entries[dirEntryIndex].inode == -1){
                 continue; // entry not in use
             }
+            //printf("Looking for: %s\n", childName);
             //printf("Current entry: %s, inode #: %d\n", parentDir.entries[dirEntryIndex].name, parentDir.entries[dirEntryIndex].inode);
 
             if(strcmp(parentDir.entries[dirEntryIndex].name, childName) == 0){
                 // found that boy lets go
+                //printf("Found %s in inode %d\n", childName, pinum);
+                //printf("Found inode number: %d\n", parentDir.entries[dirEntryIndex].inode );
+                fsync(fileno(stdout));
                 replyMsg->inum = parentDir.entries[dirEntryIndex].inode;
                 replyMsg->error = 0;
+            
                 sendReply();
                 return;
             }
         }
     }
 
+    //char errorMsg[50];
+    //sprintf(replyMsg->buffer, "Entry %s not found in inode %d\n", childName, pinum);
+    //strcpy(replyMsg->buffer, errorMsg);
+    //replyMsg->pinum = 5;
     //("File not found\n");
     // file not found so send back error
     replyMsg->error = -1;
+    //printf("Entry %s not found in inode %d\n", childName, pinum);
+    fsync(fileno(stdout));
 
     // now we write our reply to the socket
     sendReply();
@@ -378,8 +394,13 @@ void diskRead(){
 
     int inum = clientMsg->inum;
     int block = clientMsg->block;
-
     int inodeAddr = inodeMap->inodePtrs[inum];
+
+    if ((block < 0) || (block > 13)){
+        replyMsg->error = -1;
+        sendReply();
+        return;
+    }
 
     if (inodeAddr == -1){
         replyMsg->error = -1;
@@ -430,6 +451,8 @@ void diskRead(){
 
 void create() {
     ///type 0 = file and 1 = dir
+
+    //printf("Creating name: %s, type: %d, in pinode: %d\n", clientMsg->name, clientMsg->type, clientMsg->pinum);
     replyMsg->error = 0;
 
     int newInum = -1;
@@ -474,12 +497,18 @@ void create() {
     }
 
     // Carsen added - need to check if file already exists
+    //int finalEntry = -1;
+    //int finalBlock = -1;
+    int found = -1;
+    int lastBlock = -1;
 
     for(int i = 0; i < 14; i ++){
         int blkAddr = pinode.ptrs[i];
         if (blkAddr == -1){
             continue;
         }
+        lastBlock = i;
+
         struct Directory curDir;
         lseek(disk, blkAddr, SEEK_SET);
         read(disk, &curDir, sizeof(struct Directory));
@@ -487,6 +516,11 @@ void create() {
 
             //printf("current inode name: %s\n", curDir.entries[j].name);
             if (curDir.entries[j].inode == -1){
+                if (found == -1){
+                    //finalEntry = j;
+                    //finalBlock = i;
+                    found = 1;
+                }
                 continue;
             }
             if (strcmp(curDir.entries[j].name, clientMsg->name) == 0){
@@ -497,6 +531,10 @@ void create() {
                 return;
             }
         }
+    }
+
+    if ((found == -1) && (lastBlock != 13)){
+        // new directory block 
     }
 
                                     // Point of concern - what if parent directory has unallocated blocks between allocated blocks after deletes 
@@ -534,6 +572,7 @@ void create() {
     
     } else if(newDirEntryIndex == -1) {
         newDirBlock = 1;
+        pinodeDataPtr++;
         // want to allocate new data block here and make a new directory entry in there
         // struct Directory pdir;
         // setting all inodes to -1 in dir initially
@@ -737,9 +776,11 @@ void create() {
     // forcing writes to disk
     fsync(disk); 
 
+
     //printf("new inode num: %d\n", newInum);
 
     replyMsg->error = 0;
+    fsync(fileno(stdout));
     sendReply();
     
     return;
