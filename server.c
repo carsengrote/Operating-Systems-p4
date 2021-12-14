@@ -2,7 +2,6 @@
 #include <fcntl.h>
 #include "udp.h"
 
-
 struct Checkpoint {
     
     int logEnd;
@@ -170,7 +169,6 @@ void sendReply(){
 }
 
 void lookup(){
-
     
     int pinum = clientMsg->pinum;
     char childName[28];
@@ -218,20 +216,17 @@ void lookup(){
                 // found that boy lets go
                 replyMsg->inum = parentDir.entries[dirEntryIndex].inode;
                 replyMsg->error = 0;
-            
                 sendReply();
                 return;
             }
         }
     }
 
-    //sprintf(replyMsg->buffer, "Entry %s not found in inode %d\n", childName, pinum);
     // file not found so send back error
     replyMsg->error = -1;
     fsync(fileno(stdout));
     // now we write our reply to the socket
     sendReply();
-
     return;
 }
 
@@ -264,7 +259,6 @@ void stat(){
     replyMsg->stat.size = inode.size;
 
     sendReply(); 
-
     return;
 }
 
@@ -483,7 +477,6 @@ void create() {
 
             if (curDir.entries[j].inode == -1){
                 if (found == -1){
-
                     found = 1;
                 }
                 continue;
@@ -719,7 +712,6 @@ void create() {
     write(disk, &newLogEnd, sizeof(int));
     lseek(disk, sizeof(int) + (sizeof(int)* inodeMapPieceStart), SEEK_SET);
     write(disk, &inodeMapAddr, sizeof(int));
-
     // ADDED THIS
     lseek(disk, sizeof(int) + (sizeof(int)* pInodeMapPieceStart), SEEK_SET);
     write(disk, &newPInodeMapAddr, sizeof(int));
@@ -934,7 +926,6 @@ int main(int argc, char* argv[]){
         exit(0);
     }
 
-    printf("Initializing disk\n");
     initializeDisk(argv[2]);
     
     int portNum = atoi(argv[1]);
@@ -949,8 +940,6 @@ int main(int argc, char* argv[]){
         exit(0);
     }
 
-    printf("Server Listening on port: %d\n", portNum);
-
     clientMsg = malloc(sizeof(struct Message)); // one for from the client
     replyMsg = malloc(sizeof(struct Message)); // the one we'll send back to the client
     // zero out mem before it's used and set
@@ -958,7 +947,6 @@ int main(int argc, char* argv[]){
     memset(replyMsg, 0, sizeof(struct Message));
 
     while(1){
-
         
         int rc = UDP_Read(sd, &addr, (void *)clientMsg, sizeof(struct Message));
         if (rc <= 0 ){
