@@ -43,13 +43,9 @@ struct sockaddr_in addrSnd, addrRcv;
 int sd;
 
 int MFS_Init(char *hostname, int port) {
-    //tryPort = 20000;
-    //while((sd = UDP_Open(20000)) == -1){
 
-    //}
-    sd = UDP_Open(20000); //do we need this? Also, I think the port number should be diff
+    sd = UDP_Open(20000);
     int rc = UDP_FillSockAddr(&addrSnd, hostname, port);
-    // is this what we should be returning?
     return rc;
 }
 
@@ -73,7 +69,6 @@ int MFS_Lookup(int pinum, char *name) {
 	    return -1;
     }
     if(message.error == -1) {
-        //printf("%s", message.buffer);
         return -1;
     }
     return message.inum;
@@ -155,7 +150,6 @@ int MFS_Read(int inum, char *buffer, int block) {
     if(message.error == -1) {
         return -1;
     }
-    //strcpy(buffer, message.buffer);
 
     memcpy(buffer, message.buffer, 4096);
 
