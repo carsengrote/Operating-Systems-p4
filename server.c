@@ -35,8 +35,6 @@ struct Message {
     char buffer[4096];
 };
 
-
-
 struct Directory { 
 
    struct DirEntry entries[128]; 
@@ -117,13 +115,9 @@ void createDisk(char* diskName){
     rootDir->entries[1].inode = 0; 
 
     // writing all this stuff to the disk image now
-    //printf("writing CR to %d\n", (int)lseek(disk,0,SEEK_CUR));
     write(disk, initialCR, 257 * sizeof(int));
-    //printf("writing inode map to to %d\n", (int)lseek(disk,0,SEEK_CUR));
     write(disk, emptyInodeMap, 4096 * sizeof(int));
-    //printf("writing root inode to %d\n", (int)lseek(disk,0,SEEK_CUR));
     write(disk, rootInode, sizeof(struct Inode));
-    //printf("writing root dir to %d\n", (int)lseek(disk,0,SEEK_CUR));
     write(disk, rootDir, sizeof(struct Directory));
     int logEnd = ((257*sizeof(int)) + (4096*sizeof(int)) + (sizeof(struct Inode)) + (sizeof(struct Directory)));
     lseek(disk, 0, SEEK_SET); // rewind back to start of disk
@@ -183,18 +177,13 @@ void lookup(){
     // getting the name of the file we're looking for
     strcpy(childName, clientMsg->name); 
 
-    //printf("looking for %s in inode %d\n", childName, pinum);
     fsync(fileno(stdout));
-    //("looking for inode: %d with child %s\n", pinum, childName);
 
     replyMsg->error = 0;
     // Using in memory inode map to get the disk address of the parent inode
     int inodeAddr = inodeMap->inodePtrs[pinum];
-    //printf("parent inode addr: %d\n", inodeAddr);
     // if it's not valid send reply and return
     if (inodeAddr == -1){
-        //printf("inode address is invalid\n");
-        fsync(fileno(stdout));
         replyMsg->error = -1;
         sendReply();
         return;
@@ -220,19 +209,13 @@ void lookup(){
         // now reading through entries in the directory
         for (int dirEntryIndex = 0; dirEntryIndex < 128; dirEntryIndex ++){
 
-            
             // current directory entry is not in use
             if(parentDir.entries[dirEntryIndex].inode == -1){
                 continue; // entry not in use
             }
-            //printf("Looking for: %s\n", childName);
-            //printf("Current entry: %s, inode #: %d\n", parentDir.entries[dirEntryIndex].name, parentDir.entries[dirEntryIndex].inode);
 
             if(strcmp(parentDir.entries[dirEntryIndex].name, childName) == 0){
                 // found that boy lets go
-                //printf("Found %s in inode %d\n", childName, pinum);
-                //printf("Found inode number: %d\n", parentDir.entries[dirEntryIndex].inode );
-                fsync(fileno(stdout));
                 replyMsg->inum = parentDir.entries[dirEntryIndex].inode;
                 replyMsg->error = 0;
             
@@ -242,16 +225,10 @@ void lookup(){
         }
     }
 
-    //char errorMsg[50];
     //sprintf(replyMsg->buffer, "Entry %s not found in inode %d\n", childName, pinum);
-    //strcpy(replyMsg->buffer, errorMsg);
-    //replyMsg->pinum = 5;
-    //("File not found\n");
     // file not found so send back error
     replyMsg->error = -1;
-    //printf("Entry %s not found in inode %d\n", childName, pinum);
     fsync(fileno(stdout));
-
     // now we write our reply to the socket
     sendReply();
 
@@ -421,7 +398,6 @@ void diskRead(){
     if ((block <= lastBlockIndex) && (inode.ptrs[block] == -1)){
         // send back all zeros
         memset(data,0,4096);
-        //strcpy(replyMsg->buffer, data);
         memcpy(replyMsg->buffer, data, 4096);
         replyMsg->error = 0;
         sendReply();
@@ -435,7 +411,6 @@ void diskRead(){
     }
 
     // if here then it's valid data in an allocated block to read and send back
-
     int blockAddr = inode.ptrs[block];
     lseek(disk, blockAddr, SEEK_SET);
     read(disk, data, 4096);
@@ -443,7 +418,6 @@ void diskRead(){
     // zero the memory before we write to it
     memset(replyMsg->buffer, 0, 4096);
     memcpy(replyMsg->buffer, data, 4096);
-    //strcpy(replyMsg->buffer, data);
     replyMsg->error = 0;
     sendReply();
     return;
@@ -451,8 +425,6 @@ void diskRead(){
 
 void create() {
     ///type 0 = file and 1 = dir
-
-    //printf("Creating name: %s, type: %d, in pinode: %d\n", clientMsg->name, clientMsg->type, clientMsg->pinum);
     replyMsg->error = 0;
 
     int newInum = -1;
@@ -472,7 +444,6 @@ void create() {
         return;
     }
     // store new inode number in message
-    //printf("NEW INUM %d\n", newInum);
     replyMsg->inum = newInum;
 
     int pinum = clientMsg->pinum;
@@ -497,47 +468,34 @@ void create() {
     }
 
     // Carsen added - need to check if file already exists
-    //int finalEntry = -1;
-    //int finalBlock = -1;
     int found = -1;
-    int lastBlock = -1;
 
     for(int i = 0; i < 14; i ++){
         int blkAddr = pinode.ptrs[i];
         if (blkAddr == -1){
             continue;
         }
-        lastBlock = i;
 
         struct Directory curDir;
         lseek(disk, blkAddr, SEEK_SET);
         read(disk, &curDir, sizeof(struct Directory));
         for (int j = 0; j < 128; j++){
 
-            //printf("current inode name: %s\n", curDir.entries[j].name);
             if (curDir.entries[j].inode == -1){
                 if (found == -1){
-                    //finalEntry = j;
-                    //finalBlock = i;
+
                     found = 1;
                 }
                 continue;
             }
             if (strcmp(curDir.entries[j].name, clientMsg->name) == 0){
                 // file already exists just return success 
-                //printf(" %s already exits\n", clientMsg->name);
                 replyMsg->error = 0;
                 sendReply();
                 return;
             }
         }
     }
-
-    if ((found == -1) && (lastBlock != 13)){
-        // new directory block 
-    }
-
-                                    // Point of concern - what if parent directory has unallocated blocks between allocated blocks after deletes 
 
     // update parent directory
     int pinodeDataPtr = -1;
@@ -584,9 +542,7 @@ void create() {
     }   
 
     //make new Dir Entry
-    //struct DirEntry newEntry;
     strcpy(pdir.entries[newDirEntryIndex].name, clientMsg->name);
-    //newEntry.inode = newInum;
     // set new entry
     pdir.entries[newDirEntryIndex].inode = newInum;
     
@@ -622,7 +578,6 @@ void create() {
         newDir.entries[1].inode = pinum; 
     }
     // Find piece of inode map in CR region
-
     // Addr Math
     int newDirAddr;
     int newInodeAddr;
@@ -633,7 +588,6 @@ void create() {
     int newLogEnd;
 
     if(newInode.type == 'd' && newDirBlock == 1) {
-        //printf("here1\n");
         newDirAddr = CR->logEnd;
         newInodeAddr = newDirAddr+4096;
         inodeMapAddr = newInodeAddr + 64; // Changed this from 61 to 64
@@ -646,7 +600,6 @@ void create() {
         pinode.ptrs[pinodeDataPtr] = pDirBlockAddr;
     }
     else if(newInode.type == 'd' && newDirBlock == 0){
-        //printf("here2\n");
         newDirAddr = CR->logEnd;
         newInodeAddr = newDirAddr+4096;
         inodeMapAddr = newInodeAddr + 64; // 61 to 64
@@ -659,7 +612,6 @@ void create() {
         pinode.ptrs[pinodeDataPtr] = pDirBlockAddr;
     }
     else if(newInode.type == 'f' && newDirBlock == 1) {
-        //printf("here3\n");
         newInodeAddr = CR->logEnd;
         inodeMapAddr = newInodeAddr + 64; // 61 to 64
         pDirBlockAddr = inodeMapAddr + 64;
@@ -669,7 +621,6 @@ void create() {
         pinode.ptrs[pinodeDataPtr] = pDirBlockAddr;
     }
     else {
-        //printf("here for new file\n");
         newInodeAddr = CR->logEnd;
         inodeMapAddr = newInodeAddr + 64; // 61 to 64
         pDirBlockAddr = inodeMapAddr + 64;
@@ -761,13 +712,18 @@ void create() {
     // now need to update CR, in memory CR, and in memory inode map
     // updating in memory CR
     CR->inodeMapPtrs[inodeMapPieceStart] = inodeMapAddr;
-    CR->inodeMapPtrs[pInodeMapPieceStart] = inodeMapAddr; // FIX
+    CR->inodeMapPtrs[pInodeMapPieceStart] = newPInodeMapAddr; // CHECK HERE
     CR->logEnd = newLogEnd;
     // updating the inode map piece poitner in the on disk CR
     lseek(disk, 0, SEEK_SET);
     write(disk, &newLogEnd, sizeof(int));
     lseek(disk, sizeof(int) + (sizeof(int)* inodeMapPieceStart), SEEK_SET);
     write(disk, &inodeMapAddr, sizeof(int));
+
+    // ADDED THIS
+    lseek(disk, sizeof(int) + (sizeof(int)* pInodeMapPieceStart), SEEK_SET);
+    write(disk, &newPInodeMapAddr, sizeof(int));
+
     // updating in memory inode map
     //printf("UPDATING IN MEMORY INODE MAP\n");
     inodeMap->inodePtrs[newInum] = newInodeAddr;
@@ -775,21 +731,11 @@ void create() {
     
     // forcing writes to disk
     fsync(disk); 
-
-
-    //printf("new inode num: %d\n", newInum);
-
     replyMsg->error = 0;
     fsync(fileno(stdout));
     sendReply();
     
     return;
-
-    // writes
-    // must rewrite piece of inode
-    // update CR
-    // update in memory version of inode map
-    // write at log end
 }
 
 void diskUnlink(){
@@ -894,7 +840,6 @@ void diskUnlink(){
     }
     
     // now we know either it's an empty Dir or a file so we good to delete
-
     // marking the directory entry as unused
     currDirBlock.entries[finalDirIndex].inode = -1;
     // checking if it's the only entry in that block of the directory - then remove that data block from parent
@@ -976,12 +921,7 @@ void diskUnlink(){
 }
 
 void diskShutdown() {
-    //lseek(disk, 0, SEEK_SET);
-    //write(disk, CR, sizeof(struct Checkpoint));
-    //lseek(disk, &(CR->logEnd), SEEK_SET);
-    //write(disk, inodeMap, sizeof(struct InodeMap));
 
-    //fsync(disk);
     replyMsg->error = 0;
     sendReply();
     return;
