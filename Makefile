@@ -1,16 +1,17 @@
-all: libmfs.so server tester
+all: libmfs.so server
 
 libmfs.so: libmfs.c udp.c
 	gcc -fPIC -g -c -Wall libmfs.c
-	gcc -shared -Wl,-soname,libmfs.so -o libmfs.so libmfs.o -lc udp.c
+	gcc -fPIC -shared -Wl,-soname,libmfs.so -o libmfs.so libmfs.o -lc udp.c
 
 server: server.c udp.c
-	gcc -o server server.c -Wall udp.c
+	gcc -o server server.c -Wall -Werror -g udp.c
 
-tester: udp.c
-	gcc -o tester tester.c -Wall -L. -lmfs udp.c
+client: client.o libmfs.so
+	gcc -Wall -Werror -g -o client client.o -lmfs -L.
 
 clean:
-	rm -f libmfs.so
-	rm -f server
-	rm -f tester
+	rm -f libmfs.so libmfs.o
+	rm -f server server.o
+	rm -f client.o client
+	
